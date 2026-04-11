@@ -1,0 +1,27 @@
+# Scraping
+selenium==4-18.1
+beautifulsoup==4.12.3
+webdriver-manager==4.0.1
+requests==2.31.0
+
+#Data
+pandas==2.2.1
+numpy==1.26.4
+
+#NLP
+nltk==3.8.1
+scikit-learn==1.4.1
+transformers==4.39.1
+torch==2.2.1
+
+# MLFlow
+mlflow==2.11.1
+
+# Visualization
+matplotlib==3.8.3
+seaborn==0.13.2
+wordcloud==1.9.3
+
+#Utilities
+python-dotenv==1.0.1
+joblib==1.3.2

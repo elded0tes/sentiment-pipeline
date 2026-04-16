@@ -104,15 +104,3 @@ def scrape_reviews(company_url: str, max_pages: int = 5):
     df.to_csv('data/raw/reviews.csv', index=False)
     print(f'\n TOTAL EXTRACTED REVIEWS: {len(df)}')
     return df
-
-
-
-
-
-
-    
-    
-                        
-        
-    
-    

@@ -1,106 +1,153 @@
+"""
+scraper.py
+----------
+Extrae reseñas de Teamblind usando Selenium + BeautifulSoup.
+Teamblind usa renderizado JS, por lo que se requiere Selenium.
+"""
+
 import time
+import logging
 import pandas as pd
+from pathlib import Path
+from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
-from bs4 import BeautifulSoup
-from dotenv import load_dotenv
-import os
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
 
 
-load_dotenv()
+class TeamblindScraper:
+    """
+    Scraper para obtener reseñas de empresas en Teamblind.
 
-def init_driver():
-    #Driver headless mode
-    options = webdriver.ChromeOptions()
+    Uso:
+        scraper = TeamblindScraper(company="google", max_pages=5)
+        df = scraper.run()
+    """
 
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('user-agent=Mozilla/5.0')
+    BASE_URL = "https://www.teamblind.com/company/{company}/reviews?page={page}"
 
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=options
+    def __init__(self, company: str = "google", max_pages: int = 5, headless: bool = True):
+        self.company = company.lower().replace(" ", "-")
+        self.max_pages = max_pages
+        self.headless = headless
+        self.driver = None
+
+    # ------------------------------------------------------------------
+    # Driver setup
+    # ------------------------------------------------------------------
+
+    def _init_driver(self):
+        options = Options()
+        if self.headless:
+            options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--window-size=1920,1080")
+        options.add_argument(
+            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
         )
-    return driver
+        service = Service(ChromeDriverManager().install())
+        self.driver = webdriver.Chrome(service=service, options=options)
+        logger.info("Driver inicializado correctamente.")
 
-def login_glassdoor(driver):
-    #login in glassdoor
-    driver.get("https://www.glassdoor.com.mx/index.htm")
-    time.sleep(2)
+    def _close_driver(self):
+        if self.driver:
+            self.driver.quit()
+            logger.info("Driver cerrado.")
 
-    email_field = driver.find_element(By.ID, 'inlineUserEmail')
-    email_field.send_keys(os.getenv('GLASSDOOR_EMAIL'))
-    driver.find_element(By.XPATH, "//button[@type='submit'").click()
-    time.sleep()
+    # ------------------------------------------------------------------
+    # Scraping
+    # ------------------------------------------------------------------
 
-    password_field = driver.find_element(By.ID, 'inlineUserPassword')
-    password_field.send_keys(os.getenv("GLASSDOOR_PASSWORD"))
-    driver.find_element(By.XPATH, "//button[@type='submit']").click()
-    time.sleep(3)
-    print('SUCCESSFULL LOGIN :)')
-    
-def scrape_reviews(company_url: str, max_pages: int = 5):
-    #args: review page url, max scrapping pages
-    #returns: DF with reviews
-    driver = init_driver()
-    login_glassdoor(driver)
-
-    reviews = []
-
-    for page in range(1, max_pages + 1):
-        url = f'{company_url}?sort.sortType=RD&sort.ascending=false&filter.iso3Language=eng&page={page}'
-        driver.get(url)
-        time.sleep(3)
-
-        #Close pop-ups 
+    def _get_page_source(self, url: str) -> str:
+        self.driver.get(url)
         try:
-            close_btn = driver.find_element(By.CLASS_NAME, 'modal_closeIcon')
-            close_btn.click()
-            time.sleep(1)
-        except:
-            pass
-            
-        soup = BeautifulSoup(driver.page_source, 'html.parser')
-        reviews_cards = soup.find_all('li', {'class':'empReview'})
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "div.review-card, article"))
+            )
+        except Exception:
+            logger.warning(f"Timeout esperando contenido en: {url}")
+        time.sleep(2)  # buffer extra para JS dinámico
+        return self.driver.page_source
 
-        if not reviews_cards:
-            print(f'ANY REVIEWS FOUND IN PAGE {page}')
-            break
+    def _parse_reviews(self, html: str) -> list[dict]:
+        """Parsea las reseñas de una página HTML."""
+        soup = BeautifulSoup(html, "html.parser")
+        reviews = []
 
-        for card in reviews_cards:
+        # Teamblind puede cambiar sus selectores; ajusta si es necesario
+        cards = soup.select("div[class*='review'], article[class*='review']")
+
+        for card in cards:
             try:
-                rating = card.find('span', {'class':'gdStars'})
-                rating = float(rating['title']) if rating else None
+                title_el   = card.select_one("h3, [class*='title'], [class*='heading']")
+                body_el    = card.select_one("p, [class*='body'], [class*='content']")
+                rating_el  = card.select_one("[class*='rating'], [class*='star']")
+                date_el    = card.select_one("time, [class*='date']")
+                role_el    = card.select_one("[class*='role'], [class*='job'], [class*='position']")
 
-                title = card.find('a', {'class':'reviewLink'})
-                title = title.text.strip() if title else ''
+                review = {
+                    "title":  title_el.get_text(strip=True)  if title_el  else "",
+                    "review": body_el.get_text(strip=True)   if body_el   else "",
+                    "rating": rating_el.get_text(strip=True) if rating_el else "",
+                    "date":   date_el.get("datetime", date_el.get_text(strip=True)) if date_el else "",
+                    "role":   role_el.get_text(strip=True)   if role_el   else "",
+                    "company": self.company,
+                }
 
-                pros = card.find('p', {'class':'pros'})
-                pros = pros.text.strip() if pros else ''
+                # Solo guardar si tiene contenido real
+                if review["review"] or review["title"]:
+                    reviews.append(review)
 
-                cons = card.find('p', {'class':'cons'})
-                cons = cons.text.strip() if cons else''
-
-                reviews.append({
-                    'rating':rating,
-                    'title':title,
-                    'pros':pros,
-                    'cons':cons,
-                    'text':f'{pros}{cons}'.strip()
-                })
             except Exception as e:
-                print(f'Review error {e}')
+                logger.debug(f"Error parseando card: {e}")
                 continue
 
-        print(f'SCRAPED PAGE {page} - {len(reviews_cards)} REVIEWS')
+        return reviews
 
-    driver.quit()
-    df = pd.DataFrame(reviews)
-    df.to_csv('data/raw/reviews.csv', index=False)
-    print(f'\n TOTAL EXTRACTED REVIEWS: {len(df)}')
-    return df
+    def run(self) -> pd.DataFrame:
+        """Ejecuta el scraper y retorna un DataFrame."""
+        self._init_driver()
+        all_reviews = []
+
+        try:
+            for page in range(1, self.max_pages + 1):
+                url = self.BASE_URL.format(company=self.company, page=page)
+                logger.info(f"Scrapeando página {page}: {url}")
+
+                html = self._get_page_source(url)
+                reviews = self._parse_reviews(html)
+
+                if not reviews:
+                    logger.info(f"Sin reseñas en página {page}. Terminando.")
+                    break
+
+                all_reviews.extend(reviews)
+                logger.info(f"  → {len(reviews)} reseñas encontradas (total: {len(all_reviews)})")
+                time.sleep(1.5)  # respetar el rate limiting
+
+        finally:
+            self._close_driver()
+
+        df = pd.DataFrame(all_reviews)
+        logger.info(f"Scraping completo. Total de reseñas: {len(df)}")
+        return df
+
+    # ------------------------------------------------------------------
+    # Guardar datos
+    # ------------------------------------------------------------------
+
+    def save(self, df: pd.DataFrame, output_dir: str = "data/raw") -> str:
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        path = f"{output_dir}/{self.company}_reviews_raw.csv"
+        df.to_csv(path, index=False, encoding="utf-8")
+        logger.info(f"Datos guardados en: {path}")
+        return path

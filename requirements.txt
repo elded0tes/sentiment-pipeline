@@ -1,6 +1,6 @@
 # Scraping
-selenium==4-18.1
-beautifulsoup==4.12.3
+selenium==4.18.1
+beautifulsoup4==4.12.3
 webdriver-manager==4.0.1
 requests==2.31.0
 
@@ -10,7 +10,7 @@ numpy==1.26.4
 
 #NLP
 nltk==3.8.1
-scikit-learn==1.4.1
+scikit-learn==1.4.2
 transformers==4.39.1
 torch==2.2.1
 

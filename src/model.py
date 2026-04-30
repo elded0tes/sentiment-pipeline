@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 from wordcloud import WordCloud
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split, cross_val_score

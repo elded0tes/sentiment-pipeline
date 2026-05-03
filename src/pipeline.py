@@ -208,6 +208,8 @@ class SentimentPipeline:
         run_id = self._log_to_mlflow(df_sentiment, metrics, plots, params)
 
         logger.info("\n✅ Pipeline completado exitosamente.")
-        logger.info(f"   Ejecuta: mlflow ui --port 5000")
-        logger.info(f"   Abre:    http://localhost:5000\n")
+        logger.info(f"   Ejecuta: mlflow ui --port 5001")
+        logger.info(f"   Abre:    http://localhost:5001\n")
+        
+        metrics.to_csv('Results/metrics.csv', index=False, encoding="utf-8")
         return df_sentiment, metrics, run_id

@@ -1,0 +1,14 @@
+aliases: []
+creation_timestamp: 1777833446880
+current_stage: None
+description: null
+last_updated_timestamp: 1777833446880
+name: TeamblindSentiment-Google
+run_id: a431472ebdf547288356aee7d7b49889
+run_link: null
+source: /Users/erickdiazn/GitHub/sentiment-pipeline/mlruns/742264860493113928/a431472ebdf547288356aee7d7b49889/artifacts/model
+status: READY
+status_message: null
+storage_location: /Users/erickdiazn/GitHub/sentiment-pipeline/mlruns/742264860493113928/a431472ebdf547288356aee7d7b49889/artifacts/model
+user_id: null
+version: 1

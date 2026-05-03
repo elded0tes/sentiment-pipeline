@@ -1,0 +1,15 @@
+artifact_uri: /Users/erickdiazn/GitHub/sentiment-pipeline/mlruns/742264860493113928/a431472ebdf547288356aee7d7b49889/artifacts
+end_time: 1777833446891
+entry_point_name: ''
+experiment_id: '742264860493113928'
+lifecycle_stage: active
+run_id: a431472ebdf547288356aee7d7b49889
+run_name: google-sentiment
+run_uuid: a431472ebdf547288356aee7d7b49889
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1777833444694
+status: 3
+tags: []
+user_id: erickdiazn

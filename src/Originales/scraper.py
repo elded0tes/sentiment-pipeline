@@ -1,3 +1,10 @@
+"""
+scraper.py
+----------
+Extrae reseñas de Teamblind usando Selenium + BeautifulSoup.
+Teamblind usa renderizado JS, por lo que se requiere Selenium.
+"""
+
 import time
 import logging
 import pandas as pd
@@ -5,27 +12,25 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 
-
-"""
------------------------------------------------------------------------------
-scraper.py
-Extrae reseñas de Teamblind usando Selenium + BeautifulSoup.
-Teamblind usa renderizado JS, por lo que se requiere Selenium.
-"""
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+
 class TeamblindScraper:
     """
+    Scraper para obtener reseñas de empresas en Teamblind.
+
     Uso:
         scraper = TeamblindScraper(company="google", max_pages=5)
         df = scraper.run()
     """
+
     BASE_URL = "https://www.teamblind.com/company/{company}/reviews?page={page}"
 
     def __init__(self, company: str = "google", max_pages: int = 5, headless: bool = True):
@@ -44,15 +49,13 @@ class TeamblindScraper:
             options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
-        #Simulador de navegador real
-        options.add_argument("--window-size=1280,800")
+        options.add_argument("--window-size=1920,1080")
         options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    )
-
-        self.driver = webdriver.Chrome(options=options)
+            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
+        )
+        service = Service(ChromeDriverManager().install())
+        self.driver = webdriver.Chrome(service=service, options=options)
         logger.info("Driver inicializado correctamente.")
 
     def _close_driver(self):
@@ -76,59 +79,32 @@ class TeamblindScraper:
         return self.driver.page_source
 
     def _parse_reviews(self, html: str) -> list[dict]:
-        #Parsea las reseñas de una página HTML.
-        soup = BeautifulSoup(html, "html.parser")         
-        
+        """Parsea las reseñas de una página HTML."""
+        soup = BeautifulSoup(html, "html.parser")
         reviews = []
 
-        # Selector de cards y propiedades
-        cards = soup.find_all(
-            'div',
-            class_=lambda c: c and all(
-                cls in c for cls in ['flex', 'w-full', 'flex-col', 'gap-4', 'bg-white']
-            )
-        )
-        logger.info(f"Cards encontradas: {len(cards)}")
+        # Teamblind puede cambiar sus selectores; ajusta si es necesario
+        cards = soup.select("div[class*='review'], article[class*='review']")
 
         for card in cards:
             try:
-                rating_block = card.find('div', class_=lambda c: c and 'items-center' in c and 'gap-2' in c)
-                rating = rating_block.find('h3', class_='font-semibold') if rating_block else None
-
-                main_block = card.find('div', class_=lambda c: c and 'flex-1' in c)
-                if not main_block:
-                    continue
-
-                title = main_block.find('h3', class_='font-semibold')
-
-                description = main_block.find('div', class_=lambda c: c and 'text-xs' in c and 'text-gray-700' in c)
-                info_description = description.get_text(strip=True) if description else ""
-                parts_info = [p.strip() for p in info_description.split('•')]
-
-                # FIX 2: parts_info ya son strings, NO usar .get_text()
-                role = parts_info[2] if len(parts_info) > 2 else ""
-                date = parts_info[3] if len(parts_info) > 3 else ""
-
-                pros = main_block.find('div', class_=lambda c: c and 'mt-4' in c)
-                pros_text = pros.find('p').get_text(strip=True) if pros and pros.find('p') else ""
-
-                contras = main_block.find('div', class_=lambda c: c and 'my-4' in c)
-                contras_text = contras.find('p').get_text(strip=True) if contras and contras.find('p') else ""
-
-                # FIX 3: Concatenación correcta de pros + contras
-                review_text = " ".join(filter(None, [pros_text, contras_text]))
+                title_el   = card.select_one("h3, [class*='title'], [class*='heading']")
+                body_el    = card.select_one("p, [class*='body'], [class*='content']")
+                rating_el  = card.select_one("[class*='rating'], [class*='star']")
+                date_el    = card.select_one("time, [class*='date']")
+                role_el    = card.select_one("[class*='role'], [class*='job'], [class*='position']")
 
                 review = {
-                    'title': title.get_text(strip=True) if title else "",
-                    'review': review_text,
-                    'rating': rating.get_text(strip=True) if rating else "",
-                    'role': role,   # Ya es string
-                    'date': date,   # Ya es string
-                    'company': self.company,
+                    "title":  title_el.get_text(strip=True)  if title_el  else "",
+                    "review": body_el.get_text(strip=True)   if body_el   else "",
+                    "rating": rating_el.get_text(strip=True) if rating_el else "",
+                    "date":   date_el.get("datetime", date_el.get_text(strip=True)) if date_el else "",
+                    "role":   role_el.get_text(strip=True)   if role_el   else "",
+                    "company": self.company,
                 }
+
                 # Solo guardar si tiene contenido real
-            
-                if review["rating"] or review["title"]:
+                if review["review"] or review["title"]:
                     reviews.append(review)
 
             except Exception as e:
@@ -141,7 +117,7 @@ class TeamblindScraper:
         """Ejecuta el scraper y retorna un DataFrame."""
         self._init_driver()
         all_reviews = []
-        
+
         try:
             for page in range(1, self.max_pages + 1):
                 url = self.BASE_URL.format(company=self.company, page=page)
@@ -171,7 +147,7 @@ class TeamblindScraper:
 
     def save(self, df: pd.DataFrame, output_dir: str = "data/raw") -> str:
         Path(output_dir).mkdir(parents=True, exist_ok=True)
-        path = f"{output_dir}/reviews_raw.csv"
+        path = f"{output_dir}/{self.company}_reviews_raw.csv"
         df.to_csv(path, index=False, encoding="utf-8")
         logger.info(f"Datos guardados en: {path}")
         return path

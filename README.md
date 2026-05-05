@@ -61,7 +61,7 @@ python main.py --company google --pages 5
 
 ### Ejecutar con datos existentes (omite scraping)
 ```bash
-python main.py --data data/raw/google_reviews_raw.csv
+python main.py --data data/raw/reviews_raw.csv
 ```
 
 ### Ver resultados en MLFlow UI
